@@ -29,12 +29,12 @@ jobs:
       - name: Run security check
         id: security-check
         uses: ./
-        continue-on-error: true  # テスト時はエラーでも続行
+        continue-on-error: true
         with:
           target: '.'
-          severity: 'LOW'        # テスト時は閾値を下げる
+          severity: 'LOW'
           html-output: 'reports'
-          fail-on-severity: 'CRITICAL'  # クリティカルな問題のみで失敗
+          fail-on-severity: 'CRITICAL'
       
       - name: Upload security reports
         if: always()
@@ -50,6 +50,9 @@ jobs:
     needs: test-action
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.get_latest_tag.outputs.version }}
+      release_date: ${{ steps.get_latest_tag.outputs.date }}
     permissions:
       contents: write
     
@@ -87,11 +90,7 @@ jobs:
   create-release:
     name: Create Release
     needs: auto-tag
-    if: |
-      github.event_name == 'push' && (
-        github.ref == 'refs/heads/main' ||
-        startsWith(github.ref, 'refs/tags/v')
-      )
+    if: needs.auto-tag.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -101,17 +100,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
-      - name: Get version from tag
-        id: get_version
-        run: |
-          if [[ ${{ github.ref }} == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-          else
-            VERSION=${{ needs.auto-tag.outputs.version }}
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+          ref: ${{ needs.auto-tag.outputs.new_tag }}
       
       - name: Download security reports
         uses: actions/download-artifact@v4
@@ -119,25 +108,13 @@ jobs:
           name: security-reports
           path: reports/
       
-      - name: Get Changelog Entry
-        id: changelog
-        run: |
-          CHANGELOG=$(sed -n "/### ${VERSION}/,/###/p" README.md | sed '$d' | sed '1d')
-          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGELOG" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-        env:
-          VERSION: ${{ steps.get_version.outputs.VERSION }}
-      
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
-          name: Version ${{ steps.get_version.outputs.VERSION }} - リリース ${{ steps.get_version.outputs.DATE }}
+          tag_name: ${{ needs.auto-tag.outputs.new_tag }}
+          name: Version ${{ needs.auto-tag.outputs.new_tag }} - リリース ${{ needs.auto-tag.outputs.release_date }}
           body: |
-            ## 🎉 ${{ steps.get_version.outputs.VERSION }} リリース (${{ steps.get_version.outputs.DATE }})
-            
-            ${{ steps.changelog.outputs.CHANGELOG }}
+            ## 🎉 ${{ needs.auto-tag.outputs.new_tag }} リリース (${{ needs.auto-tag.outputs.release_date }})
             
             ### 📦 アーティファクト
             - セキュリティチェックレポートは、このリリースに添付されています。
