@@ -1,0 +1,99 @@
+# Python関連
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 仮想環境
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+pythonenv*
+
+# IDE関連
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.vs/
+.project
+.pydevproject
+.settings/
+
+# テスト関連
+htmlcov/
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# セキュリティチェッカー固有
+reports/
+security-reports/
+*.html
+test_results/
+.bandit
+.pylintrc.bak
+
+# OS関連
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.bak
+
+# その他
+*.env
+*.conf
+local_settings.py
+db.sqlite3
+*.db
+*.pid
+*.seed
+*.pid.lock
+
+# デバッグ関連
+debug/
+debug.log
+*.debug
+
+# ドキュメント生成関連
+docs/_build/
+docs/generated/
+_docs/
+_site/
+
+# 一時ファイル
+tmp/
+temp/
+.temp/
+*.temp
+*.tmp
