@@ -3,9 +3,6 @@ name: Test and Release
 on:
   push:
     branches: [ main ]
-    # タグプッシュ時にも実行
-    tags:
-      - 'v*.*.*'
   pull_request:
     branches: [ main ]
 
@@ -48,25 +45,79 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  create-release:
-    name: Create Release
-    needs: test-action  # テストが成功した後に実行
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+  auto-tag:
+    name: Create Auto Tag
+    needs: test-action
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # リリース作成に必要な権限
+      contents: write
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get latest tag
+        id: get_latest_tag
+        run: |
+          git fetch --tags
+          LATEST_TAG=$(git tag | grep '^v[0-9]*\.[0-9]*\.[0-9]*$' | sort -V | tail -n 1)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "version=v1.0.0" >> $GITHUB_OUTPUT
+          else
+            MAJOR=$(echo $LATEST_TAG | cut -d. -f1)
+            MINOR=$(echo $LATEST_TAG | cut -d. -f2)
+            PATCH=$(echo $LATEST_TAG | cut -d. -f3)
+            PATCH=$((PATCH + 1))
+            echo "version=${MAJOR}.${MINOR}.${PATCH}" >> $GITHUB_OUTPUT
+          fi
+          echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+      
+      - name: Create tag
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git tag -a ${{ steps.get_latest_tag.outputs.version }} -m "🔖 バージョン ${{ steps.get_latest_tag.outputs.version }} (${{ steps.get_latest_tag.outputs.date }})
+
+          自動生成されたリリースタグ"
+          git push origin ${{ steps.get_latest_tag.outputs.version }}
+
+  create-release:
+    name: Create Release
+    needs: auto-tag
+    if: |
+      github.event_name == 'push' && (
+        github.ref == 'refs/heads/main' ||
+        startsWith(github.ref, 'refs/tags/v')
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # タグ情報を取得するために必要
+          fetch-depth: 0
       
       - name: Get version from tag
         id: get_version
         run: |
-          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          if [[ ${{ github.ref }} == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION=${{ needs.auto-tag.outputs.version }}
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+      
+      - name: Download security reports
+        uses: actions/download-artifact@v4
+        with:
+          name: security-reports
+          path: reports/
       
       - name: Get Changelog Entry
         id: changelog
@@ -81,6 +132,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
           name: Version ${{ steps.get_version.outputs.VERSION }} - リリース ${{ steps.get_version.outputs.DATE }}
           body: |
             ## 🎉 ${{ steps.get_version.outputs.VERSION }} リリース (${{ steps.get_version.outputs.DATE }})
@@ -88,7 +140,7 @@ jobs:
             ${{ steps.changelog.outputs.CHANGELOG }}
             
             ### 📦 アーティファクト
-            - セキュリティチェックレポートは、最新のワークフロー実行結果から入手可能です。
+            - セキュリティチェックレポートは、このリリースに添付されています。
             
             ### 🔍 注意事項
             - このリリースは自動生成されています。
