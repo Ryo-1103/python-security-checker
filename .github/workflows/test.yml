@@ -1,8 +1,11 @@
-name: Test Action
+name: Test and Release
 
 on:
   push:
     branches: [ main ]
+    # タグプッシュ時にも実行
+    tags:
+      - 'v*.*.*'
   pull_request:
     branches: [ main ]
 
@@ -27,6 +30,7 @@ jobs:
           pip install -r requirements.txt
       
       - name: Run security check
+        id: security-check
         uses: ./
         continue-on-error: true  # テスト時はエラーでも続行
         with:
@@ -43,3 +47,53 @@ jobs:
           path: reports/
           retention-days: 7
           if-no-files-found: warn
+
+  create-release:
+    name: Create Release
+    needs: test-action  # テストが成功した後に実行
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # リリース作成に必要な権限
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # タグ情報を取得するために必要
+      
+      - name: Get version from tag
+        id: get_version
+        run: |
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          echo "DATE=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+      
+      - name: Get Changelog Entry
+        id: changelog
+        run: |
+          CHANGELOG=$(sed -n "/### ${VERSION}/,/###/p" README.md | sed '$d' | sed '1d')
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Version ${{ steps.get_version.outputs.VERSION }} - リリース ${{ steps.get_version.outputs.DATE }}
+          body: |
+            ## 🎉 ${{ steps.get_version.outputs.VERSION }} リリース (${{ steps.get_version.outputs.DATE }})
+            
+            ${{ steps.changelog.outputs.CHANGELOG }}
+            
+            ### 📦 アーティファクト
+            - セキュリティチェックレポートは、最新のワークフロー実行結果から入手可能です。
+            
+            ### 🔍 注意事項
+            - このリリースは自動生成されています。
+            - 詳細な変更履歴は README.md を参照してください。
+          draft: false
+          prerelease: false
+          files: |
+            reports/*
