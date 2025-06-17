@@ -1,0 +1,67 @@
+name: 'Python Security Checker'
+description: 'Pythonコードのセキュリティと品質をチェックするアクション'
+branding:
+  icon: 'shield'
+  color: 'green'
+
+inputs:
+  target:
+    description: 'チェック対象のPythonファイルまたはディレクトリ'
+    required: true
+    default: '.'
+  severity:
+    description: '問題検出の重要度閾値（HIGH/MEDIUM/LOW）'
+    required: false
+    default: 'MEDIUM'
+  html-output:
+    description: 'HTMLレポートの出力ディレクトリ'
+    required: false
+    default: 'security-reports'
+  fail-on-severity:
+    description: 'この重要度以上の問題が見つかった場合にCIを失敗させる（HIGH/MEDIUM/LOW）'
+    required: false
+    default: 'HIGH'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r ${{ github.action_path }}/requirements.txt
+    
+    - name: Create output directory
+      shell: bash
+      run: mkdir -p ${{ inputs.html-output }}
+    
+    - name: Run security check
+      shell: bash
+      run: |
+        if [ -f "${{ inputs.target }}" ]; then
+          # 単一ファイルの場合
+          python ${{ github.action_path }}/code_checker.py "${{ inputs.target }}" \
+            --ci \
+            --severity ${{ inputs.severity }} \
+            --html ${{ inputs.html-output }}
+        else
+          # ディレクトリの場合
+          find "${{ inputs.target }}" -name "*.py" \
+            -not -path "*/\.*" \
+            -not -path "*/venv/*" \
+            -not -path "*/virtualenv/*" \
+            -not -path "*/env/*" \
+            -type f | while read file; do
+              echo "📝 Checking: $file"
+              python ${{ github.action_path }}/code_checker.py "$file" \
+                --ci \
+                --severity ${{ inputs.severity }} \
+                --html ${{ inputs.html-output }}
+          done
+        fi
