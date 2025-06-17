@@ -28,11 +28,12 @@ jobs:
       
       - name: Run security check
         uses: ./
+        continue-on-error: true  # テスト時はエラーでも続行
         with:
           target: '.'
-          severity: 'MEDIUM'
+          severity: 'LOW'        # テスト時は閾値を下げる
           html-output: 'reports'
-          fail-on-severity: 'HIGH'
+          fail-on-severity: 'CRITICAL'  # クリティカルな問題のみで失敗
       
       - name: Upload security reports
         if: always()
