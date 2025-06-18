@@ -65,9 +65,30 @@ jobs:
       - name: Get latest tag
         id: get_latest_tag
         run: |
-          # 次のバージョンを1.12に設定
-          echo "version=1.12" >> $GITHUB_OUTPUT
+          git fetch --tags --force
+          git fetch --prune --unshallow || true
+          
+          # 現在の最新のタグを取得（数字のみのバージョン形式）
+          LATEST_TAG=$(git tag -l | grep '^[0-9]\+\.[0-9]\+$' | sort -V | tail -n 1)
+          
+          # バージョンを解析して次のバージョンを決定
+          if [ -z "$LATEST_TAG" ]; then
+            # タグが存在しない場合は1.13から開始
+            echo "version=1.13" >> $GITHUB_OUTPUT
+          else
+            # 現在のバージョン番号を取得
+            IFS='.' read -r MAJOR MINOR <<< "$LATEST_TAG"
+            
+            # マイナーバージョンをインクリメント
+            MINOR=$((MINOR + 1))
+            echo "version=${MAJOR}.${MINOR}" >> $GITHUB_OUTPUT
+          fi
           echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+      
+      - name: Display version info
+        run: |
+          echo "Latest tag found: $LATEST_TAG"
+          echo "New version will be: ${{ steps.get_latest_tag.outputs.version }}"
       
       - name: Create tag
         run: |
