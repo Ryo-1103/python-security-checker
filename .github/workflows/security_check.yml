@@ -19,7 +19,7 @@ jobs:
         run: pip install -r requirements.txt
       - name: Run code checker
         run: |
-          python code_checker.py --file test_cpp_vuln.cpp
+          python code_checker.py --file test_cpp_vuln.cpp --user admin
       - name: Run PR comment example
         run: bash ci_templates/pr_comment_example.sh > pr_comment.txt
       - name: Post PR comment
