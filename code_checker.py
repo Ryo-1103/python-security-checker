@@ -1310,6 +1310,14 @@ def main():
         if args.notify:
             summary = CIIntegration.generate_ci_summary(results)
             notify_services(summary)
+    # --- reportsディレクトリに必ず何かファイルを出力する ---
+    if args.html:
+        reports_dir = args.html
+        os.makedirs(reports_dir, exist_ok=True)
+        keep_file = os.path.join(reports_dir, ".keep")
+        if not any(os.scandir(reports_dir)):
+            with open(keep_file, "w", encoding="utf-8") as f:
+                f.write("This file ensures the reports directory is not empty for CI artifact upload.")
 
 if __name__ == "__main__":
     main()
