@@ -7,6 +7,11 @@
 - セキュリティ脆弱性
 - 危険なコードパターン
 - 依存関係の問題
+- アクセス制御とユーザー認証
+- 依存関係とライブラリのバージョン
+- 非推奨メソッドの使用
+- ハードコードされた機密情報
+- トークンとセッション管理
 
 また、以下の機能を提供します：
 - HTMLレポート出力
@@ -18,8 +23,183 @@ import sys
 import json
 import datetime
 import subprocess
-from typing import List, Dict, Any
+import re
+from typing import List, Dict, Any, Set
 from pathlib import Path
+from packaging import version
+
+# セキュリティチェックパターン
+ACCESS_CONTROL_PATTERNS = {
+    'unsafe_permissions': [
+        (r'chmod\s+777', '危険な権限設定が検出されました'),
+        (r'all_users', '全ユーザーアクセスの設定が検出されました'),
+        (r'public\s*=\s*True', '公開設定が有効になっています'),
+    ],
+    'auth_bypass': [
+        (r'disable_auth', '認証が無効化されています'),
+        (r'skip_authentication', '認証がスキップされています'),
+        (r'bypass_security', 'セキュリティチェックがバイパスされています'),
+    ],
+    'role_validation': [
+        (r'admin\s*=\s*True', '管理者権限がハードコードされています'),
+        (r'is_superuser\s*=', '特権ユーザー設定が直接操作されています'),
+    ]
+}
+
+DEPRECATED_METHODS = {
+    'python': [
+        (r'cgi\.escape', 'cgi.escapeは非推奨です。html.escapeを使用してください'),
+        (r'os\.popen', 'os.popenは非推奨です。subprocessを使用してください'),
+        (r'os\.tmpnam', 'os.tmpnamは非推奨です。tempfileを使用してください'),
+        (r'sys\.exc_clear', 'sys.exc_clearは非推奨です'),
+    ],
+    'django': [
+        (r'auth\.models\.User\.is_authenticated\(\)', 'is_authenticated()は非推奨です。is_authenticatedプロパティを使用してください'),
+        (r'urlresolvers', 'urlresolversは非推奨です。django.urlsを使用してください'),
+    ],
+    'flask': [
+        (r'flask\.ext\.', 'flask.extは非推奨です。直接インポートを使用してください'),
+    ]
+}
+
+HARDCODED_VALUES = {
+    'credentials': [
+        (r'password\s*=\s*["\'][^"\']+["\']', 'パスワードがハードコードされています'),
+        (r'secret\s*=\s*["\'][^"\']+["\']', 'シークレットキーがハードコードされています'),
+        (r'api_key\s*=\s*["\'][^"\']+["\']', 'APIキーがハードコードされています'),
+    ],
+    'connection_strings': [
+        (r'postgresql:\/\/[^@]+@', 'データベース接続文字列に認証情報が含まれています'),
+        (r'mysql:\/\/[^@]+@', 'データベース接続文字列に認証情報が含まれています'),
+        (r'mongodb:\/\/[^@]+@', 'データベース接続文字列に認証情報が含まれています'),
+    ],
+}
+
+TOKEN_SECURITY = {
+    'token_expiry': [
+        (r'expires_in\s*=\s*[0-9]{5,}', '長すぎるトークン有効期限が設定されています'),
+        (r'timedelta\(days=[0-9]{2,}\)', '長すぎるセッション期限が設定されています'),
+    ],
+    'insecure_session': [
+        (r'SESSION_COOKIE_SECURE\s*=\s*False', 'セキュアでないセッションクッキーの設定が検出されました'),
+        (r'SESSION_EXPIRE_AT_BROWSER_CLOSE\s*=\s*False', 'ブラウザ終了時のセッション終了が無効化されています'),
+    ],
+}
+
+# XSS対策パターン
+XSS_PATTERNS = {
+    'unsafe_html': [
+        (r'mark_safe\([^)]+\)', '安全でないHTMLマークアップが使用されています'),
+        (r'safe\s*=\s*True', '安全でないHTMLエスケープが設定されています'),
+        (r'html_safe\s*=\s*True', 'HTMLコンテンツが安全でない方法でマークされています'),
+    ],
+    'template_injection': [
+        (r'render_template_string', 'テンプレート文字列の直接レンダリングは危険です'),
+        (r'Template\([^)]+\).render', '動的テンプレートのレンダリングにユーザー入力が含まれる可能性があります'),
+    ],
+    'js_injection': [
+        (r'innerHTML\s*=', 'innerHTMLの使用は安全ではありません'),
+        (r'document\.write\(', 'document.writeの使用は安全ではありません'),
+    ]
+}
+
+# SQLインジェクション対策パターン
+SQL_INJECTION_PATTERNS = {
+    'raw_queries': [
+        (r'execute\([^)]*%[^)]*\)', '文字列フォーマットを使用したSQLクエリが検出されました'),
+        (r'raw\([^)]+\)', '生のSQLクエリが使用されています'),
+        (r'cursor\.execute\([^)]*\+[^)]*\)', '文字列連結を使用したSQLクエリが検出されました'),
+    ],
+    'orm_unsafe': [
+        (r'extra\([^)]+\)', 'Django ORMのextraメソッドは安全でない可能性があります'),
+        (r'raw\([^)]+\)', 'Django ORMのrawメソッドは安全でない可能性があります'),
+    ]
+}
+
+# ファイルアップロード対策パターン
+FILE_UPLOAD_PATTERNS = {
+    'unsafe_extensions': [
+        (r'\.allow_extensions\s*=\s*[\'"]\*[\'"]', '全ての拡張子が許可されています'),
+        (r'\.save\([^)]*\)', 'ファイル名の検証が不足している可能性があります'),
+    ],
+    'path_traversal': [
+        (r'\.\./', 'パストラバーサルの可能性があります'),
+        (r'os\.path\.join\([^)]*\.\.[^)]*\)', 'パストラバーサルの可能性があります'),
+    ]
+}
+
+# 暗号化セキュリティパターン
+CRYPTO_PATTERNS = {
+    'weak_crypto': [
+        (r'MD5', 'MD5は安全ではありません'),
+        (r'SHA1', 'SHA1は安全ではありません'),
+        (r'DES', 'DESは安全ではありません'),
+    ],
+    'weak_random': [
+        (r'random\.|randint|randrange', '暗号用途には random モジュールは使用しないでください'),
+        (r'math\.random', '暗号用途には math.random は使用しないでください'),
+    ],
+    'static_salt': [
+        (r'salt\s*=\s*["\'][^"\']+["\']', 'ハードコードされたソルトが使用されています'),
+    ]
+}
+
+# エラーハンドリングパターン
+ERROR_HANDLING_PATTERNS = {
+    'info_disclosure': [
+        (r'traceback\.print_exc\(\)', 'トレースバック情報が漏洩する可能性があります'),
+        (r'print_exception\(\)', '例外情報が漏洩する可能性があります'),
+    ],
+    'broad_except': [
+        (r'except\s*:', '全ての例外を捕捉することは危険です'),
+        (r'except\s+Exception:', '全ての例外を捕捉することは危険です'),
+    ]
+}
+
+# セッション設定パターン
+SESSION_PATTERNS = {
+    'insecure_settings': [
+        (r'SESSION_COOKIE_HTTPONLY\s*=\s*False', 'HTTPOnlyフラグが無効化されています'),
+        (r'SESSION_COOKIE_SAMESITE\s*=\s*None', 'SameSite属性が無効化されています'),
+    ],
+    'session_fixation': [
+        (r'session\.id\s*=', 'セッションIDの直接操作が検出されました'),
+        (r'sessionid\s*=', 'セッションIDの直接操作が検出されました'),
+    ]
+}
+
+# CORSセキュリティパターン
+CORS_PATTERNS = {
+    'unsafe_cors': [
+        (r'Access-Control-Allow-Origin\s*:\s*\*', '全オリジンを許可するCORS設定が検出されました'),
+        (r'add_header\s*["\']Access-Control-Allow-Origin[\'"]\s*["\']\\*["\']', '全オリジンを許可するCORS設定が検出されました'),
+    ],
+    'unsafe_headers': [
+        (r'Access-Control-Allow-Headers\s*:\s*\*', '全ヘッダーを許可するCORS設定が検出されました'),
+        (r'Access-Control-Allow-Methods\s*:\s*\*', '全メソッドを許可するCORS設定が検出されました'),
+    ]
+}
+
+# キャッシュセキュリティパターン
+CACHE_PATTERNS = {
+    'sensitive_caching': [
+        (r'Cache-Control\s*:\s*public', '機密情報に対する公開キャッシュ設定が検出されました'),
+        (r'@cache_page', '機密情報に対するページキャッシュが検出されました'),
+    ],
+    'cache_headers': [
+        (r'no-store\s*:\s*false', 'キャッシュ制御が不適切です'),
+        (r'private\s*:\s*false', 'プライベートキャッシュ設定が無効化されています'),
+    ]
+}
+
+# 最小要求バージョン
+MINIMUM_VERSIONS = {
+    'django': '3.2',
+    'flask': '2.0',
+    'requests': '2.25.0',
+    'sqlalchemy': '1.4',
+    'cryptography': '3.4',
+}
 
 class HTMLReportGenerator:
     """HTMLレポート生成クラス"""
@@ -566,6 +746,203 @@ class CIIntegration:
             summary.append(f"- {type_desc}: {count}件")
         
         return "\n".join(summary)
+
+class SecurityChecker:
+    def __init__(self, file_path: str):
+        self.file_path = file_path
+        self.issues: List[Dict[str, str]] = []
+
+    def check_access_control(self, content: str) -> None:
+        """アクセス制御とユーザー認証のチェック"""
+        for category, patterns in ACCESS_CONTROL_PATTERNS.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content, re.IGNORECASE):
+                    self.issues.append({
+                        'severity': 'HIGH',
+                        'category': 'アクセス制御',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_deprecated_methods(self, content: str) -> None:
+        """非推奨メソッドのチェック"""
+        for category, patterns in DEPRECATED_METHODS.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'MEDIUM',
+                        'category': '非推奨メソッド',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_hardcoded_values(self, content: str) -> None:
+        """ハードコードされた値のチェック"""
+        for category, patterns in HARDCODED_VALUES.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'HIGH',
+                        'category': 'ハードコード',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_token_security(self, content: str) -> None:
+        """トークンとセッション管理のチェック"""
+        for category, patterns in TOKEN_SECURITY.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'HIGH',
+                        'category': 'トークン管理',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_dependencies(self, requirements_path: str) -> None:
+        """依存関係のバージョンチェック"""
+        if not os.path.exists(requirements_path):
+            return
+
+        with open(requirements_path, 'r') as f:
+            requirements = f.readlines()
+
+        for req in requirements:
+            req = req.strip()
+            if '==' in req:
+                pkg_name, pkg_version = req.split('==')
+                if pkg_name in MINIMUM_VERSIONS:
+                    min_version = MINIMUM_VERSIONS[pkg_name]
+                    if version.parse(pkg_version) < version.parse(min_version):
+                        self.issues.append({
+                            'severity': 'HIGH',
+                            'category': '依存関係',
+                            'message': f'{pkg_name}の使用バージョン({pkg_version})が古すぎます。{min_version}以上にアップグレードしてください。',
+                            'file': requirements_path
+                        })
+
+    def check_xss_vulnerabilities(self, content: str) -> None:
+        """XSS脆弱性のチェック"""
+        for category, patterns in XSS_PATTERNS.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'HIGH',
+                        'category': 'XSS対策',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_sql_injection(self, content: str) -> None:
+        """SQLインジェクション脆弱性のチェック"""
+        for category, patterns in SQL_INJECTION_PATTERNS.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'CRITICAL',
+                        'category': 'SQLインジェクション',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_file_uploads(self, content: str) -> None:
+        """ファイルアップロード関連の脆弱性チェック"""
+        for category, patterns in FILE_UPLOAD_PATTERNS.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'HIGH',
+                        'category': 'ファイルアップロード',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_crypto_usage(self, content: str) -> None:
+        """暗号化関連のセキュリティチェック"""
+        for category, patterns in CRYPTO_PATTERNS.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'HIGH',
+                        'category': '暗号化セキュリティ',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_error_handling(self, content: str) -> None:
+        """エラーハンドリングのセキュリティチェック"""
+        for category, patterns in ERROR_HANDLING_PATTERNS.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'MEDIUM',
+                        'category': 'エラーハンドリング',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_session_security(self, content: str) -> None:
+        """セッション関連のセキュリティチェック"""
+        for category, patterns in SESSION_PATTERNS.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'HIGH',
+                        'category': 'セッションセキュリティ',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_cors_security(self, content: str) -> None:
+        """CORS設定のセキュリティチェック"""
+        for category, patterns in CORS_PATTERNS.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'HIGH',
+                        'category': 'CORS設定',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def check_cache_security(self, content: str) -> None:
+        """キャッシュ関連のセキュリティチェック"""
+        for category, patterns in CACHE_PATTERNS.items():
+            for pattern, message in patterns:
+                if re.search(pattern, content):
+                    self.issues.append({
+                        'severity': 'MEDIUM',
+                        'category': 'キャッシュセキュリティ',
+                        'message': message,
+                        'file': self.file_path
+                    })
+
+    def run_security_checks(self) -> List[Dict[str, str]]:
+        """すべてのセキュリティチェックを実行"""
+        with open(self.file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # 既存のチェック
+        self.check_access_control(content)
+        self.check_deprecated_methods(content)
+        self.check_hardcoded_values(content)
+        self.check_token_security(content)
+
+        # 新規追加のチェック
+        self.check_xss_vulnerabilities(content)
+        self.check_sql_injection(content)
+        self.check_file_uploads(content)
+        self.check_crypto_usage(content)
+        self.check_error_handling(content)
+        self.check_session_security(content)
+        self.check_cors_security(content)
+        self.check_cache_security(content)
+        
+        requirements_path = os.path.join(os.path.dirname(self.file_path), 'requirements.txt')
+        self.check_dependencies(requirements_path)
+
+        return self.issues
 
 def main():
     """メイン関数"""
