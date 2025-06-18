@@ -21,7 +21,9 @@ jobs:
         run: |
           python code_checker.py --file test_cpp_vuln.cpp --user admin
       - name: Run PR comment example
-        run: bash ci_templates/pr_comment_example.sh > pr_comment.txt
+        run: bash ci_templates/pr_comment_example.sh ${{ github.event.pull_request.number }} "CI自動コメントテスト"
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Post PR comment
         uses: peter-evans/create-or-update-comment@v4
         with:
