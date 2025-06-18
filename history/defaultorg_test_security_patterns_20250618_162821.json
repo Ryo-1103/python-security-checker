@@ -1,0 +1,225 @@
+{
+  "file": "C:/Users/hryo-un/Desktop/security_test/test_security_patterns.py",
+  "style_issues": [
+    {
+      "line": 0,
+      "message": "Pylint実行エラー: Command '['c:\\\\Users\\\\hryo-un\\\\Desktop\\\\security_test\\\\.venv\\\\Scripts\\\\python.exe', '-m', 'pylint', '--output-format=json', 'C:/Users/hryo-un/Desktop/security_test/test_security_patterns.py']' returned non-zero exit status 30."
+    }
+  ],
+  "security_issues": [
+    {
+      "error": "セキュリティチェックエラー: Command '['c:\\\\Users\\\\hryo-un\\\\Desktop\\\\security_test\\\\.venv\\\\Scripts\\\\python.exe', '-m', 'bandit', '-f', 'json', 'C:/Users/hryo-un/Desktop/security_test/test_security_patterns.py']' returned non-zero exit status 1."
+    }
+  ],
+  "dependency_issues": [
+    {
+      "info": "依存関係チェックはコマンドラインツール `safety check` の使用を推奨します。\nインストール方法: pip install safety\n使用方法: safety check"
+    }
+  ],
+  "dangerous_patterns": [
+    {
+      "type": "sensitive_variable",
+      "name": "env",
+      "line": 113,
+      "description": "環境変数情報を含む変数名が使用されています"
+    },
+    {
+      "type": "sensitive_variable",
+      "name": "aws_key",
+      "line": 122,
+      "description": "暗号化キーを含む変数名が使用されています"
+    },
+    {
+      "type": "sensitive_variable",
+      "name": "aws_key",
+      "line": 122,
+      "description": "AWSキーを含む変数名が使用されています"
+    },
+    {
+      "type": "sensitive_variable",
+      "name": "settings",
+      "line": 8,
+      "description": "設定情報を含む変数名が使用されています"
+    },
+    {
+      "type": "sensitive_variable",
+      "name": "password",
+      "line": 22,
+      "description": "パスワード情報を含む変数名が使用されています"
+    },
+    {
+      "type": "sensitive_variable",
+      "name": "api_key",
+      "line": 23,
+      "description": "暗号化キーを含む変数名が使用されています"
+    },
+    {
+      "type": "sensitive_variable",
+      "name": "api_key",
+      "line": 23,
+      "description": "APIキーを含む変数名が使用されています"
+    },
+    {
+      "type": "sensitive_variable",
+      "name": "token_config",
+      "line": 29,
+      "description": "アクセストークンを含む変数名が使用されています"
+    },
+    {
+      "type": "sensitive_variable",
+      "name": "token_config",
+      "line": 29,
+      "description": "設定情報を含む変数名が使用されています"
+    },
+    {
+      "type": "sensitive_variable",
+      "name": "session_config",
+      "line": 33,
+      "description": "設定情報を含む変数名が使用されています"
+    },
+    {
+      "type": "dangerous_method",
+      "name": "pickle.loads",
+      "line": 98,
+      "description": "安全でないデータ読み込みの可能性があります"
+    },
+    {
+      "type": "dangerous_method",
+      "name": "yaml.load",
+      "line": 100,
+      "description": "安全でないデータ読み込みの可能性があります"
+    },
+    {
+      "type": "dangerous_method",
+      "name": "logging.exception",
+      "line": 105,
+      "description": "例外スタックトレースのログ出力"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "../../etc/shadow",
+      "line": 119,
+      "description": "危険なディレクトリトラバーサルが含まれています"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "../../etc/shadow",
+      "line": 119,
+      "description": "危険なディレクトリトラバーサルが含まれています"
+    },
+    {
+      "type": "dangerous_function",
+      "name": "print",
+      "line": 125,
+      "description": "本番環境での不適切なログ出力"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "console.log(\"test\")",
+      "line": 126,
+      "description": "危険なコンソールログ出力が含まれています"
+    },
+    {
+      "type": "dangerous_method",
+      "name": "os.chmod",
+      "line": 6,
+      "description": "危険なファイルパーミッション変更"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "postgresql://admin:password@localhost:5432/db",
+      "line": 25,
+      "description": "危険なディレクトリトラバーサルが含まれています"
+    },
+    {
+      "type": "dangerous_method",
+      "name": "cursor.execute",
+      "line": 48,
+      "description": "SQLインジェクションの可能性があります"
+    },
+    {
+      "type": "dangerous_method",
+      "name": "cursor.execute",
+      "line": 49,
+      "description": "SQLインジェクションの可能性があります"
+    },
+    {
+      "type": "dangerous_method",
+      "name": "cursor.execute",
+      "line": 50,
+      "description": "SQLインジェクションの可能性があります"
+    },
+    {
+      "type": "dangerous_method",
+      "name": "cursor.executescript",
+      "line": 51,
+      "description": "SQLインジェクションの可能性があります"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "../../etc/passwd",
+      "line": 58,
+      "description": "危険なディレクトリトラバーサルが含まれています"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "../../etc/passwd",
+      "line": 58,
+      "description": "危険なディレクトリトラバーサルが含まれています"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "!!python/object/apply:os.system [\"ls\"]",
+      "line": 100,
+      "description": "危険なディレクトリトラバーサルが含まれています"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "/tmp/evil",
+      "line": 118,
+      "description": "危険なディレクトリトラバーサルが含まれています"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "/tmp/evil",
+      "line": 118,
+      "description": "危険な危険なシステムディレクトリへのアクセスが含まれています"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "<script>",
+      "line": 13,
+      "description": "危険なスクリプトタグが含まれています"
+    },
+    {
+      "type": "dangerous_function",
+      "name": "input",
+      "line": 40,
+      "description": "安全でない入力を受け付ける可能性があります"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "DROP TABLE users;",
+      "line": 51,
+      "description": "危険なSQLクエリ文字列が含まれています"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "SELECT * FROM users WHERE name = \"%s\"",
+      "line": 48,
+      "description": "危険なSQLクエリ文字列が含まれています"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "SELECT * FROM users WHERE id = ",
+      "line": 49,
+      "description": "危険なSQLクエリ文字列が含まれています"
+    },
+    {
+      "type": "dangerous_string",
+      "name": "SELECT * FROM users WHERE id = ",
+      "line": 50,
+      "description": "危険なSQLクエリ文字列が含まれています"
+    }
+  ]
+}

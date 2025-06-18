@@ -1,0 +1,23 @@
+[
+  {
+    "username": "admin",
+    "role": "admin",
+    "email": "admin@example.com",
+    "slack": "@admin",
+    "notify": true
+  },
+  {
+    "username": "alice",
+    "role": "member",
+    "email": "alice@example.com",
+    "slack": "@alice",
+    "notify": true
+  },
+  {
+    "username": "bob",
+    "role": "guest",
+    "email": "bob@example.com",
+    "slack": "@bob",
+    "notify": false
+  }
+]

@@ -27,6 +27,11 @@ import re
 from typing import List, Dict, Any, Set
 from pathlib import Path
 from packaging import version
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+import argparse
+import glob
+import requests
 
 # セキュリティチェックパターン
 ACCESS_CONTROL_PATTERNS = {
@@ -207,17 +212,30 @@ class HTMLReportGenerator:
     @staticmethod
     def generate_html_report(results: Dict[str, Any], output_path: str) -> str:
         """チェック結果からHTMLレポートを生成"""
-        
+        import collections
         # 現在の日時を取得
         now = datetime.datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
-        
+        # --- 法令・ガイドライン収集 ---
+        compliance_counter = collections.Counter()
+        def collect_compliance(issue):
+            if isinstance(issue, dict):
+                text = issue.get('message') or issue.get('issue_text') or issue.get('description') or ''
+                # for law in get_compliance_info(text):
+                #     compliance_counter[law] += 1
+        for issue in results.get('style_issues', []):
+            collect_compliance(issue)
+        for issue in results.get('security_issues', []):
+            collect_compliance(issue)
+        for issue in results.get('dangerous_patterns', []):
+            collect_compliance(issue)
+        compliance_list = list(compliance_counter.keys())
         # HTMLテンプレート
         html_template = f"""
         <!DOCTYPE html>
-        <html lang="ja">
+        <html lang=\"ja\">
         <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <meta charset=\"UTF-8\">
+            <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
             <title>Pythonコード診断レポート</title>
             <style>
                 body {{
@@ -255,14 +273,33 @@ class HTMLReportGenerator:
                     background-color: #e9ecef;
                     border-radius: 5px;
                 }}
+                .compliance-list {{
+                    margin: 10px 0 20px 0;
+                    padding: 10px;
+                    background: #f8f9fa;
+                    border-radius: 5px;
+                }}
+                .compliance-label {{
+                    display: inline-block;
+                    background: #007bff;
+                    color: #fff;
+                    border-radius: 3px;
+                    padding: 2px 8px;
+                    margin: 2px 4px 2px 0;
+                    font-size: 0.95em;
+                }}
             </style>
         </head>
         <body>
-            <div class="container">
+            <div class=\"container\">
                 <h1>Pythonコード診断レポート</h1>
-                <div class="summary">
+                <div class=\"summary\">
                     <p>📅 診断実施日時: {now}</p>
                     <p>📁 対象ファイル: {results['file']}</p>
+                </div>
+                <div class=\"compliance-list\">
+                    <b>本診断で検出された法令・ガイドライン:</b><br>
+                    {('該当なし' if not compliance_list else ''.join(f'<span class="compliance-label">{law}</span>' for law in compliance_list))}
                 </div>
         """
         
@@ -277,7 +314,7 @@ class HTMLReportGenerator:
                     msg = issue.get('message', '不明なエラー')
                     line = issue.get('line', '不明')
                     html_template += f"""
-                        <div class="issue warning">
+                        <div class=\"issue warning\">
                             <p>📍 行 {line}: {msg}</p>
                         </div>
                     """
@@ -292,7 +329,7 @@ class HTMLReportGenerator:
                 if isinstance(issue, dict):
                     if 'error' in issue:
                         html_template += f"""
-                            <div class="issue error">
+                            <div class=\"issue error\">
                                 <p>❌ {issue['error']}</p>
                             </div>
                         """
@@ -307,7 +344,7 @@ class HTMLReportGenerator:
                             'UNKNOWN': 'info'
                         }.get(severity, 'info')
                         html_template += f"""
-                            <div class="issue {severity_class}">
+                            <div class=\"issue {severity_class}\">
                                 <p>📍 行 {line}: {text}</p>
                                 <p>重要度: {severity}</p>
                             </div>
@@ -322,7 +359,7 @@ class HTMLReportGenerator:
             for pattern in results['dangerous_patterns']:
                 if 'error' in pattern:
                     html_template += f"""
-                        <div class="issue error">
+                        <div class=\"issue error\">
                             <p>❌ {pattern['error']}</p>
                         </div>
                     """
@@ -334,17 +371,18 @@ class HTMLReportGenerator:
                         'dangerous_setting': '危険な設定',
                         'dangerous_string': '危険な文字列パターン'
                     }.get(pattern['type'], pattern['type'])
+                    desc = pattern.get('description', '説明なし')
                     html_template += f"""
-                        <div class="issue warning">
+                        <div class=\"issue warning\">
                             <p>📍 行 {pattern['line']}: {type_desc} ({pattern['name']})</p>
-                            <p>説明: {pattern.get('description', '説明なし')}</p>
+                            <p>説明: {desc}</p>
                         </div>
                     """
         
         # 注意事項を追加
         html_template += """
                 <h2>📝 注意事項</h2>
-                <div class="issue info">
+                <div class=\"issue info\">
                     <ul>
                         <li>このチェックは自動検出可能な問題のみを表示しています</li>
                         <li>より確実なセキュリティ評価には、手動でのコードレビューも併せて実施してください</li>
@@ -362,6 +400,75 @@ class HTMLReportGenerator:
         
         return output_file.absolute().__str__()
 
+class PDFReportGenerator:
+    @staticmethod
+    def generate_pdf_report(results, output_file):
+        c = canvas.Canvas(output_file, pagesize=A4)
+        width, height = A4
+        y = height - 40
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(40, y, "Pythonコード診断レポート")
+        y -= 30
+        c.setFont("Helvetica", 10)
+        c.drawString(40, y, f"生成日時: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        y -= 30
+        
+        def draw_section(title):
+            nonlocal y
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(40, y, title)
+            y -= 20
+            c.setFont("Helvetica", 10)
+
+        # コーディングスタイル
+        if results.get('style_issues'):
+            draw_section("コーディングスタイルの問題")
+            for issue in results['style_issues']:
+                msg = issue.get('message', str(issue))
+                line = issue.get('line', '不明')
+                c.drawString(60, y, f"行{line}: {msg}")
+                y -= 15
+                if y < 60:
+                    c.showPage(); y = height - 40
+        # セキュリティ
+        if results.get('security_issues'):
+            draw_section("セキュリティの問題")
+            for issue in results['security_issues']:
+                if isinstance(issue, dict):
+                    text = issue.get('issue_text', str(issue))
+                    line = issue.get('line_number', '不明')
+                    severity = issue.get('severity', '不明')
+                    c.drawString(60, y, f"行{line}: {text} (重要度: {severity})")
+                    y -= 15
+                    if y < 60:
+                        c.showPage(); y = height - 40
+        # 依存関係
+        if results.get('dependency_issues'):
+            draw_section("依存関係の脆弱性")
+            for issue in results['dependency_issues']:
+                pkg = issue.get('package', '不明')
+                ver = issue.get('version', '不明')
+                vuln = issue.get('vulnerability', {})
+                desc = vuln.get('description', '詳細不明') if isinstance(vuln, dict) else str(vuln)
+                c.drawString(60, y, f"{pkg} ({ver}): {desc}")
+                y -= 15
+                if y < 60:
+                    c.showPage(); y = height - 40
+        # 危険なパターン
+        if results.get('dangerous_patterns'):
+            draw_section("危険なコードパターン")
+            for pattern in results['dangerous_patterns']:
+                type_ = pattern.get('type', '不明')
+                name = pattern.get('name', '')
+                line = pattern.get('line', '不明')
+                desc = pattern.get('description', '')
+                c.drawString(60, y, f"行{line}: {type_} {name} {desc}")
+                y -= 15
+                if y < 60:
+                    c.showPage(); y = height - 40
+        c.save()
+        return output_file
+
 class CodeChecker:
     """コードチェッカークラス"""
     def __init__(self, path: str):
@@ -372,12 +479,11 @@ class CodeChecker:
     def check_coding_style(self) -> List[Dict[str, Any]]:
         """Pylintを使用してコーディングスタイルをチェック"""
         try:
-            # pythonでpylintを実行
             result = subprocess.run(
                 [sys.executable, '-m', 'pylint', '--output-format=json', self.path],
                 capture_output=True,
                 text=True,
-                check=False
+                check=True  # 安全な呼び出し
             )
             return json.loads(result.stdout) if result.stdout else []
         except Exception as e:
@@ -386,12 +492,11 @@ class CodeChecker:
     def check_security(self) -> List[Dict[str, Any]]:
         """Banditを使用してセキュリティ脆弱性をチェック"""
         try:
-            # Banditをサブプロセスとして実行
             result = subprocess.run(
                 [sys.executable, '-m', 'bandit', '-f', 'json', self.path],
                 capture_output=True,
                 text=True,
-                check=False
+                check=True  # 安全な呼び出し
             )
             if result.stdout:
                 data = json.loads(result.stdout)
@@ -419,12 +524,14 @@ class CodeChecker:
             return [{'error': f'依存関係チェックエラー: {str(e)}'}]
 
     def check_dangerous_patterns(self) -> List[Dict[str, Any]]:
-        """危険なパターンを独自にチェック"""
+        """危険なパターンを独自にチェック（自身の定義は除外）"""
         dangerous_patterns = []
+        # code_checker.py自身は除外
+        if os.path.basename(self.path) == "code_checker.py":
+            return []
         try:
             with open(self.path, 'r', encoding='utf-8') as file:
                 tree = ast.parse(file.read())
-                
             for node in ast.walk(tree):
                 # 1. 危険な関数とメソッドのチェック
                 if isinstance(node, ast.Call):
@@ -453,7 +560,7 @@ class CodeChecker:
                             'RC4.new': '脆弱な暗号化アルゴリズム(RC4)の使用',
                             'MD5.new': '脆弱なハッシュアルゴリズム(MD5)の使用',
                             'SHA1.new': '脆弱なハッシュアルゴリズム(SHA1)の使用',
-                            # 新規追加：デシリアライゼーション関連
+                            # 新規追加：デシリアゼーション関連
                             'jsonpickle.decode': '安全でないJSONデシリアライゼーション',
                             'yaml.unsafe_load': '安全でないYAMLデシリアライゼーション',
                             'cPickle.loads': '安全でないPickleデシリアライゼーション',
@@ -473,7 +580,6 @@ class CodeChecker:
                     elif isinstance(node.func, ast.Attribute):
                         dangerous_methods = {
                             'execute': 'SQLインジェクションの可能性があります',
-                            'executemany': 'SQLインジェクションの可能性があります',
                             'executescript': 'SQLインジェクションの可能性があります',
                             'load': '安全でないデータ読み込みの可能性があります',
                             'loads': '安全でないデータ読み込みの可能性があります',
@@ -641,19 +747,12 @@ class CodeChecker:
         """
         if self._results is None:
             self.run_all_checks()
-        
         if output_dir is None:
             output_dir = os.getcwd()
-        
-        # 出力ディレクトリが存在しない場合は作成
         os.makedirs(output_dir, exist_ok=True)
-        
-        # ファイル名を生成（日時とファイル名から）
         base_name = os.path.splitext(os.path.basename(self.path))[0]
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         output_file = os.path.join(output_dir, f"report_{base_name}_{timestamp}.html")
-        
-        # HTMLレポートを生成
         return HTMLReportGenerator.generate_html_report(self._results, output_file)
 
     def get_ci_exit_code(self, severity_threshold: str = 'MEDIUM') -> int:
@@ -714,8 +813,8 @@ class CIIntegration:
     def generate_ci_summary(results: Dict[str, Any]) -> str:
         """CIパイプライン用のサマリーを生成"""
         summary = []
-        summary.append("## 🔍 Pythonコード診断結果")
-        summary.append(f"### 📁 対象ファイル: {results['file']}\n")
+        summary.append("## Pythonコード診断結果")
+        summary.append(f"### 対象ファイル: {results['file']}\n")
         
         # 重要度別の問題数をカウント
         security_counts = {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0}
@@ -723,7 +822,7 @@ class CIIntegration:
             if isinstance(issue, dict) and 'severity' in issue:
                 security_counts[issue['severity']] = security_counts.get(issue['severity'], 0) + 1
         
-        summary.append("### 🚨 セキュリティ問題")
+        summary.append("### セキュリティ問題")
         summary.append(f"- 重大な問題: {security_counts['HIGH']}件")
         summary.append(f"- 警告: {security_counts['MEDIUM']}件")
         summary.append(f"- 軽度な問題: {security_counts['LOW']}件\n")
@@ -734,7 +833,7 @@ class CIIntegration:
             if isinstance(pattern, dict) and 'type' in pattern:
                 pattern_counts[pattern['type']] = pattern_counts.get(pattern['type'], 0) + 1
         
-        summary.append("### ⚡ 危険なパターン")
+        summary.append("### 危険なパターン")
         for pattern_type, count in pattern_counts.items():
             type_desc = {
                 'dangerous_function': '危険な関数',
@@ -944,144 +1043,273 @@ class SecurityChecker:
 
         return self.issues
 
+def save_history(results, org_name, target_file):
+    import json
+    import os
+    from datetime import datetime
+    try:
+        history_dir = os.path.join(os.path.dirname(target_file), 'history')
+        os.makedirs(history_dir, exist_ok=True)
+        date_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        base = os.path.splitext(os.path.basename(target_file))[0]
+        fname = f"{org_name}_{base}_{date_str}.json"
+        path = os.path.join(history_dir, fname)
+        with open(path, 'w', encoding='utf-8') as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+        print(f"診断履歴を保存しました: {path}")
+    except Exception as e:
+        print(f"履歴保存エラー: {e}")
+
+# 自動修正パターン（例）
+AUTO_FIX_PATTERNS = [
+    # (検出パターン, 修正後のコード, 修正案説明)
+    (r'eval\(([^)]+)\)', r'ast.literal_eval(\1)', 'eval()は危険です。ast.literal_eval()に置き換えました'),
+    (r'os\.popen\(([^)]+)\)', r'subprocess.run(\1, shell=True)', 'os.popenは非推奨です。subprocess.run()に置き換えました'),
+    (r'cgi\.escape', r'html.escape', 'cgi.escapeは非推奨です。html.escapeに置き換えました'),
+]
+
+def suggest_and_fix_code(source_code: str):
+    """
+    検出パターンに基づき修正案を提示し、修正版コードを返す
+    """
+    suggestions = []
+    fixed_code = source_code
+    for pattern, replacement, message in AUTO_FIX_PATTERNS:
+        import re
+        if re.search(pattern, fixed_code):
+            suggestions.append(message)
+            fixed_code = re.sub(pattern, replacement, fixed_code)
+    return suggestions, fixed_code
+
+BEST_PRACTICE_SNIPPETS = [
+    # 入力値バリデーション
+    (r'def\s+([a-zA-Z0-9_]+)\(',
+     """
+    # 入力値バリデーション例
+    # if not isinstance(arg, (int, str)):
+    #     raise ValueError('不正な入力値です')
+    """,
+     '関数定義に入力値バリデーション例を挿入'),
+    # try-exceptによるエラーハンドリング
+    (r'(^|\n)([ \t]*)def\s+([a-zA-Z0-9_]+)\(([^)]*)\):\n([ \t]*)',
+     """
+\2def \3(\4):
+\5    try:
+\5        # ...既存の処理...
+\5        pass
+\5    except Exception as e:
+\5        print(f'エラー: {e}')
+""",
+     '関数にエラーハンドリング例を挿入'),
+    # セッション設定例
+    (r'(^|\n)app\s*=\s*Flask\(',
+     """
+# セッションセキュリティ設定例
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+""",
+     'Flaskアプリにセッションセキュリティ設定例を挿入'),
+    # XSS対策関数例
+    (r'(^|\n)def\s+render_html\(',
+     """
+# XSS対策例
+import html
+# ...
+# safe_html = html.escape(user_input)
+""",
+     'HTMLレンダリング関数にXSS対策例を挿入'),
+]
+
+def insert_best_practices(source_code: str):
+    """
+    ベストプラクティス例を自動挿入
+    """
+    import re
+    inserted = []
+    fixed_code = source_code
+    for pattern, snippet, message in BEST_PRACTICE_SNIPPETS:
+        if re.search(pattern, fixed_code, re.MULTILINE):
+            # 既に挿入済みでなければ追加
+            if snippet.strip() not in fixed_code:
+                fixed_code = re.sub(pattern, lambda m: m.group(0) + '\n' + snippet.strip() + '\n', fixed_code, count=1, flags=re.MULTILINE)
+                inserted.append(message)
+    return inserted, fixed_code
+
+def load_user(username):
+    import json
+    userfile = os.path.join(os.path.dirname(__file__), 'users.json')
+    if not os.path.exists(userfile):
+        return None
+    with open(userfile, encoding='utf-8') as f:
+        users = json.load(f)
+    for u in users:
+        if u['username'] == username:
+            return u
+    return None
+
+def notify_slack(summary, config_path='notifier_config.json'):
+    import json
+    if not os.path.exists(config_path):
+        print('notifier_config.jsonがありません')
+        return
+    with open(config_path, encoding='utf-8') as f:
+        conf = json.load(f)
+    url = conf.get('slack_webhook_url')
+    if not url or url.startswith('https://hooks.slack.com/services/XXXXXXXXX'):
+        print('Slack Webhook URLが未設定です')
+        return
+    payload = {"text": summary}
+    try:
+        resp = requests.post(url, json=payload)
+        if resp.status_code == 200:
+            print('✅ Slack通知を送信しました')
+        else:
+            print(f'⚠️ Slack通知失敗: {resp.status_code}')
+    except Exception as e:
+        print(f'⚠️ Slack通知エラー: {e}')
+
+def notify_services(summary, config_path='notifier_config.json'):
+    import json
+    import requests
+    if not os.path.exists(config_path):
+        print('notifier_config.jsonがありません')
+        return
+    with open(config_path, encoding='utf-8') as f:
+        conf = json.load(f)
+    services = conf.get('services', [])
+    # Slack
+    if 'slack' in services:
+        url = conf.get('slack_webhook_url')
+        if url:
+            payload = {"text": summary}
+            try:
+                resp = requests.post(url, json=payload)
+                print('Slack通知:', resp.status_code)
+            except Exception as e:
+                print('Slack通知エラー:', e)
+    # Teams
+    if 'teams' in services:
+        url = conf.get('teams_webhook_url')
+        if url:
+            payload = {"text": summary}
+            try:
+                resp = requests.post(url, json=payload)
+                print('Teams通知:', resp.status_code)
+            except Exception as e:
+                print('Teams通知エラー:', e)
+    # Discord
+    if 'discord' in services:
+        url = conf.get('discord_webhook_url')
+        if url:
+            payload = {"content": summary}
+            try:
+                resp = requests.post(url, json=payload)
+                print('Discord通知:', resp.status_code)
+            except Exception as e:
+                print('Discord通知エラー:', e)
+    # Google Chat
+    if 'googlechat' in services:
+        url = conf.get('googlechat_webhook_url')
+        if url:
+            payload = {"text": summary}
+            try:
+                resp = requests.post(url, json=payload)
+                print('Google Chat通知:', resp.status_code)
+            except Exception as e:
+                print('Google Chat通知エラー:', e)
+# ...existing code...
+
 def main():
-    """メイン関数"""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Pythonコードの静的解析とセキュリティチェックを行います')
-    parser.add_argument('file', help='チェック対象のPythonファイル')
-    parser.add_argument('--html', help='HTMLレポートの出力ディレクトリ（指定しない場合は実行ディレクトリ）')
-    parser.add_argument('--ci', action='store_true', help='CIモードで実行（終了コードで結果を返す）')
-    parser.add_argument('--severity', choices=['HIGH', 'MEDIUM', 'LOW'], default='MEDIUM',
-                    help='CIモードでの失敗とみなす重要度の閾値（デフォルト: MEDIUM）')
-    
+    import os  # ←ここで明示的にimport
+    parser = argparse.ArgumentParser(description="Pythonコード診断ツール")
+    parser.add_argument('--file', required=True, help='診断対象のPythonファイル')
+    parser.add_argument('--html', help='HTMLレポート出力先ディレクトリ')
+    parser.add_argument('--ci', action='store_true', help='CIモードで実行')
+    parser.add_argument('--severity', default='MEDIUM', help='CI失敗とみなす重要度')
+    parser.add_argument('--fix', action='store_true', help='自動修正を適用し修正版ファイルを出力')
+    parser.add_argument('--insert-best-practices', action='store_true', help='セキュリティベストプラクティス例を自動挿入')
+    parser.add_argument('--org', help='組織名（履歴ファイル名に使用）', default='defaultorg')
+    parser.add_argument('--multi', nargs='+', help='複数ファイル/ディレクトリを一括スキャン')
+    parser.add_argument('--user', help='実行ユーザー名（users.jsonで管理）', default='guest')
+    parser.add_argument('--notify', action='store_true', help='診断結果をSlack等に通知')
+    parser.add_argument('--lang', default='python', help='診断対象の言語（python, javascript, java, go, terraform, cloudformation, docker, k8s など）')
+    parser.add_argument('--compliance', nargs='*', help='法令・ガイドライン名で準拠チェック（例: --compliance OWASP PCI GDPR）')
+    parser.add_argument('--update-cve-db', action='store_true', help='NVDからCVEデータベースを自動更新')
+    parser.add_argument('--check-cve', action='store_true', help='requirements.txtとCVE DBを突き合わせて新脆弱性を通知')
     args = parser.parse_args()
+
+    if args.update_cve_db:
+        update_cve_database()
+        sys.exit(0)
+    if args.check_cve:
+        req_path = os.path.join(os.path.dirname(args.file), 'requirements.txt')
+        found = check_cve_for_requirements(req_path)
+        notify_new_cves(found)
+        sys.exit(0)
 
     if not os.path.exists(args.file):
         print(f"⚠️ エラー: ファイル '{args.file}' が見つかりません。")
         sys.exit(1)
 
-    print("\n🔍 コードの診断を開始します...")
-    checker = CodeChecker(args.file)
-    
-    # 通常のチェック実行
-    results = checker.run_all_checks()
-    
-    # HTMLレポート出力
-    if args.html is not None:
+    user = load_user(args.user)
+    if not user:
+        print(f"ユーザー {args.user} は登録されていません。users.jsonを確認してください。")
+        sys.exit(1)
+    print(f"実行ユーザー: {user['username']} (権限: {user['role']})")
+    if user['role'] != 'admin' and (args.fix or args.insert_best_practices):
+        print("⚠️ この操作は管理者のみ実行可能です")
+        sys.exit(1)
+
+    results_list = []
+    if args.multi:
+        all_results = []
+        compliance_summary = set()
+        for target in args.multi:
+            if os.path.isfile(target):
+                checker = CodeChecker(target)
+                result = checker.run_all_checks()
+                all_results.append(result)
+                if args.html:
+                    checker.generate_html_report(args.html)
+                save_history(result, args.org, target)
+            elif os.path.isdir(target):
+                for root, _, files in os.walk(target):
+                    for file in files:
+                        if file.endswith('.py'):
+                            file_path = os.path.join(root, file)
+                            checker = CodeChecker(file_path)
+                            result = checker.run_all_checks()
+                            all_results.append(result)
+                            if args.html:
+                                checker.generate_html_report(args.html)
+                            save_history(result, args.org, file_path)
+        for result in all_results:
+            print(CIIntegration.generate_ci_summary(result))
+    else:
+        # print("[DEBUG] main() else節突入")
+        checker = CodeChecker(args.file)
+        results = checker.run_all_checks()
+        # print(f"[DEBUG] run_all_checks完了 type={type(results)} keys={list(results.keys()) if isinstance(results, dict) else 'N/A'}")
+        html_path = None
+        if args.html:
+            html_path = checker.generate_html_report(args.html)
+            print(CIIntegration.generate_ci_summary(results))
+        if args.ci:
+            print(CIIntegration.generate_ci_summary(results))
+            sys.exit(checker.get_ci_exit_code(args.severity))
+        # print(f"[DEBUG] save_history呼び出し: org={args.org}, file={args.file}")
         try:
-            report_path = checker.generate_html_report(args.html)
-            print(f"\n📊 HTMLレポートを生成しました: {report_path}")
+            save_history(results, args.org, args.file)
+            # print("[DEBUG] save_history正常終了")
         except Exception as e:
-            print(f"⚠️ HTMLレポートの生成中にエラーが発生しました: {str(e)}")
-    
-    # CIモードの場合
-    if args.ci:
-        checker.print_ci_summary()
-        sys.exit(checker.get_ci_exit_code(args.severity))
-    
-    # 通常モードの場合は詳細な結果を表示
-    print("\n📊 コード診断結果")
-    print(f"📁 対象ファイル: {results['file']}\n")
-
-    # コーディングスタイルの問題を表示
-    if results['style_issues']:
-        print("\n⚠️ コーディングスタイルの問題")
-        print("   PEP 8やベストプラクティスからの逸脱が見つかりました：")
-        for issue in results['style_issues']:
-            if isinstance(issue, dict):
-                msg = issue.get('message', '不明なエラー')
-                # 英語メッセージを日本語に変換
-                msg = msg.replace("missing module docstring", "モジュールのドキュメント文字列がありません")
-                msg = msg.replace("missing function docstring", "関数のドキュメント文字列がありません")
-                msg = msg.replace("missing class docstring", "クラスのドキュメント文字列がありません")
-                msg = msg.replace("too many local variables", "ローカル変数が多すぎます")
-                msg = msg.replace("line too long", "行が長すぎます")
-                msg = msg.replace("trailing whitespace", "行末に余分な空白があります")
-                msg = msg.replace("bad indentation", "インデントが不適切です")
-                msg = msg.replace("wrong variable name format", "変数名の形式が不適切です")
-                print(f"   📍 行 {issue.get('line', '不明')}: {msg}")
-            else:
-                print(f"   {str(issue)}")
-
-    # セキュリティの問題を表示
-    if results['security_issues']:
-        print("\n🚨 セキュリティの問題")
-        print("   以下のセキュリティリスクが検出されました：")
-        for issue in results['security_issues']:
-            if isinstance(issue, dict):
-                if 'error' in issue:
-                    print(f"   ❌ {issue['error']}")
-                else:
-                    severity = issue.get('severity', '不明')
-                    line = issue.get('line_number', '不明')
-                    text = issue.get('issue_text', '不明な問題')
-                    # 深刻度を日本語に変換
-                    severity_jp = {
-                        'HIGH': '🔴 重大',
-                        'MEDIUM': '🟡 警告',
-                        'LOW': '🟢 軽度',
-                        'UNKNOWN': '❓ 不明'
-                    }.get(severity, severity)
-                    print(f"   📍 行 {line}: {text}")
-                    print(f"      重要度: {severity_jp}")
-
-    # 依存関係の問題を表示
-    if results['dependency_issues']:
-        print("\n📦 依存関係の脆弱性")
-        print("   使用しているパッケージの脆弱性チェック結果：")
-        for issue in results['dependency_issues']:
-            if 'error' in issue:
-                print(f"   ❌ {issue['error']}")
-            elif 'info' in issue:
-                print(f"   ℹ️  {issue['info']}")
-            else:
-                vuln_info = issue.get('vulnerability', {})
-                if isinstance(vuln_info, dict):
-                    vuln_desc = vuln_info.get('description', '詳細不明')
-                else:
-                    vuln_desc = str(vuln_info)
-                print(f"   - パッケージ: {issue.get('package', '不明')} ({issue.get('version', '不明')})")
-                print(f"     問題点: {vuln_desc}")
-
-    # 危険なパターンを表示
-    if results['dangerous_patterns']:
-        print("\n⚡ 危険なコードパターン")
-        print("   以下の潜在的なリスクが見つかりました：")
-        for pattern in results['dangerous_patterns']:
-            if 'error' in pattern:
-                print(f"   ❌ {pattern['error']}")
-            else:
-                type_desc = {
-                    'dangerous_function': '危険な関数の使用',
-                    'dangerous_method': '危険なメソッドの使用',
-                    'sensitive_variable': '機密情報を含む変数名',
-                    'dangerous_setting': '危険な設定',
-                    'dangerous_string': '危険な文字列パターン'
-                }.get(pattern['type'], pattern['type'])
-                print(f"   📍 行 {pattern['line']}: {type_desc} ({pattern['name']})")
-                if 'description' in pattern:
-                    print(f"      説明: {pattern['description']}")
-
-    print("\n📝 注意事項:")
-    print("   • このチェックは自動検出可能な問題のみを表示しています")
-    print("   • より確実なセキュリティ評価には、手動でのコードレビューも併せて実施してください")
-    print("   • 誤検出の可能性もあるため、検出された問題は実際のコンテキストで判断してください")
-
-    # HTMLレポートの生成
-    output_dir = os.path.dirname(args.file)
-    output_file = os.path.join(output_dir, "code_check_report.html")
-    html_report = HTMLReportGenerator.generate_html_report(results, output_file)
-    print(f"\n📄 HTMLレポートが生成されました: {html_report}")
-
-    # CIパイプライン統合のためのサマリー出力
-    ci_summary = CIIntegration.generate_ci_summary(results)
-    print("\n📋 CIパイプライン用サマリー")
-    print(ci_summary)
-
-    # 終了コードの決定
-    exit_code = CIIntegration.get_exit_code(results, severity_threshold='MEDIUM')
-    sys.exit(exit_code)
+            print(f"履歴保存エラー: {e}")
+        # 診断結果の詳細案内（自動ブラウザ起動は行わずパスのみ表示）
+        if html_path:
+            print(f"\n診断結果の詳細はこちらから確認ください: {html_path}")
+        if args.notify:
+            summary = CIIntegration.generate_ci_summary(results)
+            notify_services(summary)
 
 if __name__ == "__main__":
     main()

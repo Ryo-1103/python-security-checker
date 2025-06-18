@@ -119,23 +119,25 @@ Version: 1.14
 
 ### 基本的な使用方法
 ```bash
-python code_checker.py target.py
+python code_checker.py --file target.py
 ```
 
 ### HTMLレポート出力
 ```bash
-python code_checker.py target.py --html ./reports
+python code_checker.py --file target.py --html ./reports
 ```
 
 ### CIモードでの実行
 ```bash
-python code_checker.py target.py --ci --severity MEDIUM
+python code_checker.py --file target.py --ci --severity MEDIUM
 ```
 
 ### すべての機能を使用
 ```bash
-python code_checker.py target.py --html ./reports --ci --severity MEDIUM
+python code_checker.py --file target.py --html ./reports --ci --severity MEDIUM
 ```
+
+- どの順序でも `--file` で診断対象ファイルを指定できます。
 
 ## 📋 コマンドラインオプション
 
@@ -228,3 +230,30 @@ safety>=2.0.0
 ## 📄 ライセンス
 
 MITライセンスの下で公開されています。
+
+## 脆弱性データベース自動更新・新CVE通知
+
+- NVD（米国脆弱性データベース）から最新CVE情報を自動取得し、依存パッケージと突き合わせて新たな脆弱性を検出・通知します。
+- Slack通知にも対応。
+
+### 使い方
+
+1. NVDからCVEデータベースを取得・更新
+
+```sh
+python code_checker.py 任意のファイル.py --update-cve-db
+```
+
+2. requirements.txtの依存パッケージとCVEデータベースを突き合わせて新規脆弱性を通知
+
+```sh
+python code_checker.py 任意のファイル.py --check-cve
+```
+
+- 新たなCVEが見つかった場合は標準出力とSlack（notifier_config.json設定時）に通知されます。
+- 通知済みCVEはlast_cve_notify.jsonで管理され、重複通知を防止します。
+
+### 注意
+- NVD APIの仕様上、取得件数や期間は適宜調整してください。
+- requirements.txtのパッケージ名とNVDの製品名が完全一致しない場合、一部検出できないことがあります。
+- Slack通知にはnotifier_config.jsonの設定が必要です。

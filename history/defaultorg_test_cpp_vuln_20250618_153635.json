@@ -1,0 +1,20 @@
+{
+  "file": "C:/Users/hryo-un/Desktop/security_test/test_cpp_vuln.cpp",
+  "style_issues": [
+    {
+      "line": 0,
+      "message": "Pylint実行エラー: Command '['C:\\\\Users\\\\hryo-un\\\\Desktop\\\\security_test\\\\.venv\\\\Scripts\\\\python.exe', '-m', 'pylint', '--output-format=json', 'C:/Users/hryo-un/Desktop/security_test/test_cpp_vuln.cpp']' returned non-zero exit status 2."
+    }
+  ],
+  "security_issues": [],
+  "dependency_issues": [
+    {
+      "info": "依存関係チェックはコマンドラインツール `safety check` の使用を推奨します。\nインストール方法: pip install safety\n使用方法: safety check"
+    }
+  ],
+  "dangerous_patterns": [
+    {
+      "error": "パターンチェックエラー: invalid syntax (<unknown>, line 4)"
+    }
+  ]
+}

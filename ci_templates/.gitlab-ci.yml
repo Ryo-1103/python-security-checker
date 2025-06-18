@@ -1,0 +1,9 @@
+stages:
+  - security_check
+
+security_check:
+  image: python:3.11
+  script:
+    - pip install -r requirements.txt
+    - python code_checker.py test_target.py --ci --severity MEDIUM
+  allow_failure: false

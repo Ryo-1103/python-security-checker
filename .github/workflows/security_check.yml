@@ -1,0 +1,29 @@
+name: Security Check
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run code checker
+        run: |
+          python code_checker.py --file test_cpp_vuln.cpp
+      - name: Run PR comment example
+        run: bash ci_templates/pr_comment_example.sh > pr_comment.txt
+      - name: Post PR comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-file: pr_comment.txt

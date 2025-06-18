@@ -1,0 +1,24 @@
+{
+  "slack_webhook_url": "",
+  "teams_webhook_url": "",
+  "notify_on": [
+    "LOW",
+    "CRITICAL"
+  ],
+  "channel": "",
+  "username": "",
+  "icon_emoji": "",
+  "email": {
+    "smtp_server": "smtp.example.com",
+    "smtp_port": 587,
+    "username": "user@example.com",
+    "password": "password",
+    "to": "notify@example.com"
+  },
+  "services": [
+    "discord",
+    "googlechat"
+  ],
+  "discord_webhook_url": "https://discord.com/api/webhooks/1384789864863502398/NfI4q1BT8mCdKu5GVsLHd0FZahfLfOKgDJJl1AkWABmjn3T6Tsy6uSECuKlUz93g9_l9",
+  "googlechat_webhook_url": "https://chat.googleapis.com/v1/spaces/AAAAyW7i6aM/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=EprbB4FiT1l6zVUuO0-z98WgC8DiOHncF1G5-0DBssQ"
+}

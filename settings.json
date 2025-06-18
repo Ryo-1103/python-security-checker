@@ -1,0 +1,8 @@
+{
+  "check_style": false,
+  "check_security": true,
+  "check_dependency": true,
+  "check_dangerous": true,
+  "use_custom_rules": true,
+  "lang": "python"
+}
