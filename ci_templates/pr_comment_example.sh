@@ -5,4 +5,9 @@
 PR_NUMBER=$1
 COMMENT=$2
 
+if [ -z "$PR_NUMBER" ]; then
+  echo "PR番号が指定されていないためコメント投稿をスキップします。"
+  exit 0
+fi
+
 gh pr comment $PR_NUMBER --body "$COMMENT"
