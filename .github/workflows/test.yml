@@ -65,22 +65,8 @@ jobs:
       - name: Get latest tag
         id: get_latest_tag
         run: |
-          git fetch --tags --force
-          git fetch --prune --unshallow || true
-          
-          # すべてのタグを取得して、セマンティックバージョニングに従うものだけを抽出
-          LATEST_TAG=$(git tag -l 'v*' --sort=-v:refname | grep '^v[0-9]\+\.[0-9]\+\.[0-9]\+$' | head -n 1)
-          
-          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" \< "v1.10.0" ]; then
-            # タグが存在しないか、v1.10.0未満の場合は v1.10.0 から開始
-            echo "version=v1.10.0" >> $GITHUB_OUTPUT
-          else
-            # バージョン番号を分解してパッチバージョンをインクリメント
-            VERSION=${LATEST_TAG#v}
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
-            PATCH=$((PATCH + 1))
-            echo "version=v${MAJOR}.${MINOR}.${PATCH}" >> $GITHUB_OUTPUT
-          fi
+          # 次のバージョンを1.12に設定
+          echo "version=1.12" >> $GITHUB_OUTPUT
           echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
       
       - name: Create tag
@@ -117,10 +103,10 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ needs.auto-tag.outputs.new_tag }}
-          name: Version ${{ needs.auto-tag.outputs.new_tag }} - リリース ${{ needs.auto-tag.outputs.release_date }}
+          name: バージョン ${{ needs.auto-tag.outputs.new_tag }} - リリース ${{ needs.auto-tag.outputs.release_date }}
           body: |
-            ## 🎉 ${{ needs.auto-tag.outputs.new_tag }} リリース (${{ needs.auto-tag.outputs.release_date }})
-            
+            ## 🎉 バージョン ${{ needs.auto-tag.outputs.new_tag }} リリース (${{ needs.auto-tag.outputs.release_date }})
+
             ### 📦 アーティファクト
             - セキュリティチェックレポートは、このリリースに添付されています。
             
