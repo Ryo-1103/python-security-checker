@@ -20,11 +20,15 @@ jobs:
       - name: Run code checker
         run: |
           python code_checker.py --file test_cpp_vuln.cpp --user admin
+      - name: Check gh auth status
+        env:
+          GH_TOKEN: ${{ secrets.MY_PAT }}
+        run: gh auth status
       - name: Run PR comment example
         if: ${{ github.event.pull_request.number != '' }}
         run: bash ci_templates/pr_comment_example.sh ${{ github.event.pull_request.number }} "CI自動コメントテスト"
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.MY_PAT }}
       - name: Post PR comment
         if: ${{ github.event.pull_request.number != '' }}
         uses: peter-evans/create-or-update-comment@v4
