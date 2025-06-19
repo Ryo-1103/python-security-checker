@@ -84,8 +84,9 @@ class CodeCheckerGUI(tk.Tk):
         self.cmb_user = ttk.Combobox(frm_user, textvariable=self.user_var, values=user_names, state="readonly", width=18)
         self.cmb_user.grid(row=0, column=1, padx=4, sticky="w")
         self.cmb_user.current(0)
-        self.slack_notify_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(frm_user, text="Slack通知を有効化", variable=self.slack_notify_var).grid(row=0, column=2, padx=4, sticky="w")
+        # Slack通知を有効化チェックボックスを削除
+        # self.slack_notify_var = tk.BooleanVar(value=True)
+        # ttk.Checkbutton(frm_user, text="Slack通知を有効化", variable=self.slack_notify_var).grid(row=0, column=2, padx=4, sticky="w")
         # オプション
         frm_opt = ttk.LabelFrame(frm_main, text="診断オプション", padding=10)
         frm_opt.pack(fill="x", padx=16, pady=10)
@@ -244,7 +245,7 @@ class CodeCheckerGUI(tk.Tk):
             args.append("--fix")
         if self.best_var.get():
             args.append("--insert-best-practices")
-        if self.notify_var.get() or self.slack_notify_var.get():
+        if self.notify_var.get():
             args.append("--notify")
         if self.compliance_var.get().strip():
             args += ["--compliance"] + self.compliance_var.get().strip().split()
