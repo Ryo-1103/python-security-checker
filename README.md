@@ -1,10 +1,23 @@
 # Python コード診断ツール
 
-Version: 1.14
+Version: 1.21
 
 このツールは、Pythonコードの静的解析とセキュリティチェックを行う総合的な診断ツールです。コーディングスタイル、セキュリティ脆弱性、危険なコードパターン、依存関係の問題などを自動的に検出し、詳細なレポートを生成します。
 
 ## 📝 更新履歴
+
+### 1.21 (2025-06-18)
+- 🛠️ CI/CD安定化・自動リリース運用強化
+  - PRコメント自動投稿の分岐（pull_request以外でのエラー回避）
+  - Artifact（security-reports）未生成時のエラー回避（continue-on-error追加/ダミーファイル出力）
+  - GitHub Actionsワークフローの現状に合わせた修正
+  - READMEの全面刷新
+- 📝 使用方法・CI/CD例・アーティファクト名の最新化
+- 🐛 その他細かなバグ修正
+
+### 1.20 (2025-06-18)
+- 🔄 自動バージョン発番・リリース自動化
+- 📝 コード・レポート出力の安定化
 
 ### 1.14 (2025-06-18)
 - 🔍 以下の新しいセキュリティチェック項目を追加：
@@ -19,24 +32,6 @@ Version: 1.14
   - 依存関係の管理強化
   - セッション管理のセキュリティ
 
-### 1.12 (2025-06-18)
-- 🔄 CI/CDパイプラインの最適化
-  - 自動タグ生成の改善
-  - リリースプロセスの簡素化
-  - バージョン管理の効率化
-
-### 1.11 (2025-06-17)
-- 🐛 バグ修正とパフォーマンス改善
-- 📊 レポート出力の調整
-
-### 1.10 (2025-06-17)
-- 🔧 GitHub Actionsワークフローの改善
-  - エラー処理の強化（continue-on-error対応）
-  - レポート生成とアーティファクト保存の最適化
-  - テスト実行の安定性向上
-- 📊 HTMLレポート機能の強化
-- 🛡️ セキュリティチェックの信頼性向上
-
 ## 🌟 主な機能
 
 - ✅ コーディングスタイルチェック（PEP 8準拠）
@@ -45,79 +40,12 @@ Version: 1.14
 - 📦 依存関係の問題チェック
 - 📊 HTMLレポート出力
 - 🔄 CIパイプライン統合
-
-## 🔍 検出対象となる主な問題
-
-### セキュリティリスク
-- 危険な関数の使用（eval, exec など）
-- SQLインジェクションの可能性
-- 安全でないデシリアライゼーション
-- ファイルシステムの危険な操作
-- 脆弱な暗号化実装
-- 環境変数関連の危険な操作
-- 不適切なログ出力
-
-### デシリアライゼーションとメモリ
-- pickle/yaml/marshalの安全でない使用
-- メモリリークの可能性
-- 大きな入力データの制限
-- 無限ループ・再帰の制御
-- リソース枯渇対策
-
-### APIとデータ検証
-- JWTトークンの検証
-- APIレートリミット
-- APIバージョニング
-- 入力値の型チェック
-- NULLバイト攻撃対策
-- バリデーション処理
-
-### インフラストラクチャ
-- クラウドサービスの認証情報
-- コンテナのセキュリティ設定
-- Dockerfileのベストプラクティス
-- サービスアカウントの権限
-- ストレージの公開設定
-
-### DoS攻撃対策
-- 無限ループの検出
-- 危険な再帰呼び出し
-- リソース消費の制限
-- タイムアウト設定の確認
-- メモリ使用量の監視
-- ネットワークリソースの制御
-
-### 機密情報
-- パスワードや認証情報
-- APIキーや各種トークン
-- 証明書や秘密鍵情報
-- データベース接続情報
-- クラウド認証情報
-
-### 依存関係とパッケージ
-- 既知の脆弱性のあるパッケージ
-- 古いバージョンの使用
-- サプライチェーン攻撃対策
-- パッケージの整合性検証
-
-### セッションと監視
-- セッションの固定化対策
-- セッションタイムアウト
-- セッションの並行性制御
-- 機密情報のログ出力
-- エラーメッセージの露出
-- デバッグモードの検出
-
-### 設定関連
-- セキュリティ設定の無効化
-- デバッグモードの有効化
-- 危険なホスト設定
-- SSL/TLS関連の設定
-- タイムアウト設定
+- 🤖 PRコメント自動投稿（GitHub Actions）
+- 📤 Slack/Discord/Teams/Google Chat通知
 
 ## 🚀 使用方法
 
-### 基本的な使用方法
+### 基本的な使い方
 ```bash
 python code_checker.py --file target.py
 ```
@@ -134,66 +62,127 @@ python code_checker.py --file target.py --ci --severity MEDIUM
 
 ### すべての機能を使用
 ```bash
-python code_checker.py --file target.py --html ./reports --ci --severity MEDIUM
+python code_checker.py --file target.py --html ./reports --ci --severity MEDIUM --notify
 ```
 
-- どの順序でも `--file` で診断対象ファイルを指定できます。
+### 複数ファイル/ディレクトリ一括スキャン
+```bash
+python code_checker.py --multi src/ tests/ --html ./reports
+```
+
+### 脆弱性DB連携・CVEチェック
+```bash
+python code_checker.py 任意のファイル.py --update-cve-db
+python code_checker.py 任意のファイル.py --check-cve
+```
 
 ## 📋 コマンドラインオプション
 
 | オプション | 説明 |
 |------------|------|
-| `file` | チェック対象のPythonファイル（必須） |
+| `--file` | チェック対象のPythonファイル（必須） |
+| `--multi DIR...` | 複数ファイル/ディレクトリ一括スキャン |
 | `--html DIR` | HTMLレポートの出力ディレクトリ |
 | `--ci` | CIモードで実行（終了コードで結果を返す） |
 | `--severity {HIGH,MEDIUM,LOW}` | CIモードでの失敗とみなす重要度の閾値（デフォルト: MEDIUM） |
+| `--notify` | Slack等に診断結果を通知 |
+| `--user USERNAME` | 実行ユーザー指定（users.jsonで管理） |
+| `--update-cve-db` | NVDからCVEデータベースを自動更新 |
+| `--check-cve` | requirements.txtとCVE DBを突き合わせて新脆弱性を通知 |
 
 ## 📊 レポート形式
 
-### 標準出力
-- コーディングスタイルの問題
-- セキュリティ脆弱性
-- 危険なコードパターン
-- 依存関係の問題
+- 標準出力：コーディングスタイル・セキュリティ脆弱性・危険なコードパターン・依存関係の問題
+- HTMLレポート：見やすい形式でのレポート表示（重要度色分け・詳細説明・行番号・レスポンシブ対応）
 
-### HTMLレポート
-- 見やすい形式でのレポート表示
-- 問題の重要度に応じた色分け
-- 詳細な説明と行番号の表示
-- レスポンシブデザイン対応
+## 🔄 CI/CDパイプライン統合例
 
-## 🔄 CIパイプライン統合
-
-### GitHub Actionsでの使用例
+### GitHub Actions（推奨例）
 ```yaml
-name: Code Security Check
+name: Test and Release
 
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  security-check:
+  test-action:
+    name: Run security check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      
+          cache: 'pip'
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      
       - name: Run security check
-        run: |
-          python code_checker.py target.py --ci --severity MEDIUM --html ./reports
-      
-      - name: Upload security report
-        if: always()
-        uses: actions/upload-artifact@v2
+        id: security-check
+        uses: ./
+        continue-on-error: true
         with:
-          name: security-report
-          path: ./reports/*.html
+          target: '.'
+          severity: 'LOW'
+          html-output: 'reports'
+          fail-on-severity: 'CRITICAL'
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: reports/
+          retention-days: 7
+          if-no-files-found: warn
+  auto-tag:
+    name: Create Auto Tag
+    needs: test-action
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      # ...タグ生成処理...
+  create-release:
+    name: Create Release
+    needs: auto-tag
+    if: needs.auto-tag.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.auto-tag.outputs.new_tag }}
+      - name: Download security reports
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: security-reports
+          path: reports/
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.auto-tag.outputs.new_tag }}
+          name: バージョン ${{ needs.auto-tag.outputs.new_tag }} - リリース ${{ needs.auto-tag.outputs.release_date }}
+          files: |
+            reports/*
+```
+
+### PRコメント自動投稿例
+```yaml
+      - name: Run PR comment example
+        if: ${{ github.event.pull_request.number != '' }}
+        run: bash ci_templates/pr_comment_example.sh ${{ github.event.pull_request.number }} "CI自動コメントテスト"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Post PR comment
+        if: ${{ github.event.pull_request.number != '' }}
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-file: pr_comment.txt
 ```
 
 ## ⚙️ 必要要件
@@ -212,9 +201,10 @@ safety>=2.0.0
 
 ## 🔧 カスタマイズ
 
-- 独自の危険なパターンの追加が可能
+- 独自の危険なパターンの追加が可能（custom_rules.json編集）
 - セキュリティチェックの重要度閾値の調整
 - レポート形式のカスタマイズ
+- 通知サービス（Slack/Discord/Teams/Google Chat）設定
 
 ## 📈 今後の予定
 

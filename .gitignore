@@ -97,3 +97,4 @@ temp/
 .temp/
 *.temp
 *.tmp
+notifier_config.json
