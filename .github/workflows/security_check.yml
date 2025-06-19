@@ -29,6 +29,9 @@ jobs:
         run: bash ci_templates/pr_comment_example.sh ${{ github.event.pull_request.number }} "CI自動コメントテスト"
         env:
           GH_TOKEN: ${{ secrets.MY_PAT }}
+      - name: Create PR comment file
+        run: echo "CI自動コメントテスト" > pr_comment.txt
+
       - name: Post PR comment
         if: ${{ github.event.pull_request.number != '' }}
         uses: peter-evans/create-or-update-comment@v4
